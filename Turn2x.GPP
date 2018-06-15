@@ -1,0 +1,541 @@
+;   Rev 1.0   15 Jun 2018
+;	Turning 2 axes
+; ---------------------------------------------------------------------
+@init_post
+    global string tool_diameter_f tool_number_f spin_f xend_f first_tool_number_f
+    global numeric drill_lower_zz drill_upper_zz drill_clearance_zz ffeed q ss
+    global numeric save_spin_unit save_x save_z save_tool m_feed_flag no_okez
+    global logical spin_dir_us spin_dir_us1 mak_grv ben2
+	global integer first_tool_number save_feed_unit
+
+    ; Non GPPL variables
+    num_user_procs =    15
+    line_labels    = TRUE     ; Jump to N...
+
+    ; GPPL variables
+    numeric_def_f   = '5.3'
+    integer_def_f   = '5.0(p)'
+    gcode_f         = '2.0(p)'
+    mcode_f         = '2.0(p)'
+    xpos_f          = '5.3(*2)'
+    xend_f          = xpos_f
+    ypos_f          = '5.3'
+    zpos_f          = '5.3'
+    feed_f          = '4.3'
+    tool_diameter_f = '5.3/1'
+    blknum_f        = '5.0(p)'
+    tool_number_f   = 'z2.0(n)'
+	first_tool_number_f = tool_number_f
+    blknum_gen      = true
+    blknum_exist    = true
+    blknum          =   1
+    blknum_delta    =   1
+    blknum_max      = 92000
+    gcode_space     = TRUE
+    spin_f          = '5.0(n)'
+	save_feed_unit = mm_rev
+    ;trace "all":5
+
+endp
+
+;-------------------
+
+@start_of_file
+    ; before tools definition
+    {'O'program_number, ' (', g_file_name, ')'}		 
+endp
+
+;-------------------
+
+@start_program
+    ; after tools definition
+	{nb, 'M8'}
+	{nb, 'G18 G21 G40 G80 G90 G', (save_feed_unit+98)}
+endp
+
+;-------------------
+
+@end_program
+	{' M9'}
+    xpos=xtool/2
+    zpos=ztool
+	call @rapid_move
+	{' M5'}
+	call @rapid_move
+	{' T', first_tool_number, first_tool_number}
+endp
+
+;-------------------
+
+@end_of_file
+	{nb, 'M30'}
+    {nl, '%'}
+endp
+
+;-------------------
+
+@relative_mode
+
+endp
+
+;-------------------
+
+@absolute_mode
+endp
+
+;-------------------
+
+@machine_plane
+endp
+
+;-------------------
+
+@call_proc
+;   {nb, 'M98 P'label}
+    {[' ('message, ')']}
+endp
+
+;-------------------
+
+@proc
+     blknum = 10
+    {nl, ':'label}
+endp
+
+;-------------------
+
+@end_proc
+    ; {nb, 'M99'}
+endp
+
+;----------------
+
+@loop
+
+endp
+
+;----------------
+
+@end_loop
+
+endp
+
+;----------------
+
+@def_tool
+
+endp
+
+;-------------------
+
+@rapid_move
+    gcode = 0
+    {nb, ['G'gcode]}
+    {[' X'xpos] , [' Z'zpos]}
+    save_x = xpos
+    save_z = zpos
+endp
+
+;-------------------
+
+@line
+    gcode = 1
+    {nb, ['G'gcode]}
+    {[' X'xpos], [' Z'zpos]}
+
+    if prev_command eq '@turn_proc' then
+        change(feed) = TRUE
+    endif
+    if feed_unit eq mm_rev
+        if m_feed_flag eq 1
+           {' F'feed }
+           m_feed_flag = 0
+        else
+           {[' F'feed] }
+        endif
+    else
+        if m_feed_flag eq 1
+           {' F'feed:'5.0(p)'}
+           m_feed_flag = 0
+        else
+           {[' F'feed:'5.0(p)']}
+        endif
+    endif
+endp
+
+;-------------------
+
+@arc
+    {nb}
+    if arc_direction eq CCW then
+        gcode = 3
+    else         ; CW
+        gcode = 2
+    endif
+    {['G'gcode] ' X'xend ' Z'zend}
+        if arc_size >= 180 then
+            radius = -radius
+        endif
+        {' R'radius}
+           ;;;;;;;;;;;;;;;
+    if feed_unit eq css
+        if m_feed_flag eq 1
+           {' F'feed }
+           m_feed_flag = 0
+        else
+           {[' F'feed] }
+        endif
+    else
+        if m_feed_flag eq 1
+           {' F'feed:'5.0(p)'}
+           m_feed_flag = 0
+        else
+           {[' F'feed:'5.0(p)']}
+        endif
+    endif
+endp
+
+;-------------------
+
+@compensation
+    if side eq COMP_LEFT then
+        gcode = 41
+    endif
+    if side eq COMP_RIGHT then
+        gcode = 42
+    endif
+    if side eq COMP_OFF then
+        gcode = 40
+    endif
+    {nb 'G'gcode ' ' }
+    skipline = false
+endp
+
+;-------------------
+
+@delay
+    gcode = 4
+    {nb 'G'gcode, ' P'delay_period:integer_def_f}
+endp
+
+;-------------------
+
+@change_ref_point
+
+endp
+
+;-------------------
+
+@home_number
+
+endp
+
+;-------------------
+
+@rotate
+
+endp
+
+;-------------------
+
+@fourth_axis
+
+endp
+
+;-------------------
+
+@turn_change_tool
+    {nb, 'G54 G0 X'xtool:zpos_f, ' Z'ztool:zpos_f} 
+	if first_tool
+		first_tool_number = tool_number
+	endif
+    {' T'tool_number tool_number}
+	if spin_unit eq rpm
+        {nb, 'G97'}
+		call @start_tool
+    else
+		{nb, 'G0 X'xnext:xpos_f, ' Z'znext:zpos_f}
+		{nb, 'G50 S',spin_limit:integer_def_f} 
+        {nb, 'G96'}
+		call @start_tool
+		{nb, 'G4 P2000'}
+    endif
+endp
+
+;-------------------
+
+@message
+    ;{nb, '(', message, ')'}
+endp
+
+;-------------------
+
+
+
+@drill_point
+
+endp
+
+;-------------------
+
+@mirror
+
+endp
+
+;-------------------
+
+@end_drill
+
+endp
+
+;-------------------
+
+@halt_program
+    {' M0'}
+endp
+
+;--------------------
+
+@round_comp
+    ; NOP
+endp
+
+;--------------------
+
+@start_of_job
+    ;message = msg
+    ;{nb, '(', message, ')'}
+endp
+
+;--------------------
+
+@end_of_job
+	if !last_tool then
+		xpos = xtool/2
+		zpos = ztool
+		call @rapid_move
+		{nb, 'M01'}
+	endif
+endp
+
+;--------------------
+
+@assign_axis
+    ;   TBD
+endp
+
+;     =======================
+;     USER DEFINED PROCEDURES
+;     =======================
+
+@call_simple_proc
+    active(message) = FALSE
+    active(parm1)   = FALSE
+    active(parm2)   = FALSE
+    active(parm3)   = FALSE
+    proc_count      = 1
+    call @call_proc
+endp
+
+;-------------------
+
+@start_tool
+    if tool_direction eq CW then
+        mcode = 4
+    else              ;  CCW
+        mcode = 3
+    endif
+    {' S'spin:integer_def_f, ' M'mcode}	
+endp
+
+;-------------------
+
+@stop_tool
+    {' M5'}
+endp
+
+;-------------------
+
+@turning
+    local numeric ww uu rr aa bb
+    local logical ben1
+
+    if semi_finish then
+        rough_offset_x = semi_offset_x
+        rough_offset_z = semi_offset_z
+        work_type = rough
+        if process_type eq long
+           if turning_mode <> internal
+               uu = save_x - first_pos_x
+           else
+               uu = first_pos_x - save_x
+           endif
+           down_step = (uu+10)
+        else
+            ww = save_z - first_pos_z
+            down_step = (ww+10)
+        endif
+        ben1 = true
+    endif
+
+    if work_type eq ROUGH then
+        if process_type eq LONG then
+            gcode = 71
+            {nb, 'G'gcode}
+            {' U'down_step, ' R'(down_step/2) }
+            {nb, 'G'gcode ' P'start_line ' Q'end_line}
+            {' U'rough_offset_x ' W'rough_offset_z}
+        else
+            gcode = 72
+            {nb, 'G'gcode }
+            {' W'down_step, ' R'(down_step/2) }
+            {nb 'G'gcode ' P'start_line ' Q'end_line}
+            {' U'rough_offset_x ' W'rough_offset_z}
+        endif
+        if feed_unit eq css
+            {' F'feed }
+        else
+            {' F'feed:'5.0(p)' }
+        endif
+        ben2 = true
+    endif
+
+    if work_type eq COPY then
+
+        ww = save_z - first_pos_z
+        uu = save_x - first_pos_x
+
+        aa = (uu - rough_offset_x)
+        bb = (ww - rough_offset_z)
+        rr = sqrt(aa * aa + bb * bb)
+
+        gcode = 73
+
+        if ben1 eq false
+           num_down_steps = rr / down_step + 1
+        else
+           num_down_steps = 1
+        endif
+
+        {nb, 'G'gcode,' U'uu, ' W'ww, ' R'num_down_steps}
+        {nb, 'G'gcode ' P'start_line ' Q'end_line }
+        {' U'rough_offset_x ' W'rough_offset_z}
+
+        if feed_unit eq css
+            {' F'feed }
+        else
+            {' F'feed:'5.0(p)' }
+        endif
+
+    endif
+
+    if semi_finish then
+         gcode = 150
+    endif
+
+    if finish then
+        gcode = 151
+    endif
+
+endp
+
+@turn_proc
+endp
+
+@turn_endproc
+endp
+
+@end_job_procs
+;   {nb, 'M99'}
+endp
+
+
+@feed_spin
+    m_feed_flag = 1
+	save_feed_unit = feed_unit
+	if change(save_feed_unit) then
+		if feed_unit eq mm_min
+			{' G98'}
+		else
+			{' G99'}
+		endif
+	endif	
+    if change(spin) then
+        {nb, 'S'spin}
+    endif
+endp
+
+
+@thread
+        local string Dn_f K_f
+        local numeric taper_angle Dn
+		local integer Pn 
+		Dn_f = '4.0(p*1000)'
+		K_f  = '1.3'
+        taper_angle = (first_pos_x-last_pos_x)
+		
+		Pn = 2
+		Dn = depth/(thread_passes ^ 0.5)
+		
+        if last_pos_x <> first_pos_x
+            if turning_mode <> internal
+                xpos = (last_pos_x + depth + safety )
+            else
+                xpos = (last_pos_x - depth - safety )
+            endif
+            gcode = 0
+            {nb,'G'gcode ' X'xpos }
+        endif
+
+        if lead_unit <> mm
+           lead = (25.4*lead)
+        endif
+
+        if work_type eq multiple
+			{nb, 'M24'}
+            gcode = 76
+			{nb, 'G'gcode ' X'last_pos_x:xpos_f ' Z'last_pos_z:zpos_f ' K'depth:K_f ' D'Dn:Dn_f ' A'thread_profile_angle ' P'Pn ' F'lead}			
+        else
+            gcode = 92
+            ;{nb ' G'gcode ' X'last_pos_x:xpos_f ' Z'last_pos_z}
+            ;if taper_angle <> 0
+            ;    {' R'taper_angle}
+            ;endif
+            ;{' F'lead:feed_f}
+        endif
+endp
+
+
+@groove
+
+        local string for for1 for2  for3
+        local numeric d1 d2
+
+        for1 = '2/2.0(P)'
+        for2 = '2/2.0(P*10)'
+        for3 = '5.0(P*1000)'
+        d1 = abs(side_step)
+        d2 = abs(down_step)
+         if process_type eq face
+             gcode = 74
+             {nb 'G'gcode, ' R'release_dist }
+             {nb 'G'gcode,' X'last_pos_x:xpos_f ' Z'last_pos_z ' P'd1 :for3 ' Q'd2 :for3 }
+             if feed_unit eq css
+                 {' F'feed }
+             else
+                 {' F'feed:'5.0(p)' }
+             endif
+         else
+             gcode = 75
+             {nb 'G'gcode, ' R'release_dist }
+             {nb 'G'gcode,' X'last_pos_x:xpos_f ' Z'last_pos_z ' P'd2:for3 ' Q'd1:for3}
+             if feed_unit eq css
+                 {' F'feed }
+             else
+                 {' F'feed:'5.0(p)' }
+             endif
+         endif
+endp
+@turn_opt_parms
+
+endp
